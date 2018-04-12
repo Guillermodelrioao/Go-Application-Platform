@@ -1,42 +1,54 @@
 package main
 
-import (	
-  "log"
-  "net/http"
-  "fmt"
-  "html/template"
-  "os/exec"
-
-  
+import (
+	"html/template"
+	"io/ioutil"
+	"log"
+	"net/http"
 )
 
+type Page struct {
+	Title string
+	Body  []byte
+}
+
+func (p *Page) save() error {
+	filename := p.Title + ".txt"
+	return ioutil.WriteFile(filename, p.Body, 0600)
+}
+
+func loadPage(title string) (*Page, error) {
+	filename := title + ".txt"
+	body, err := ioutil.ReadFile(filename)
+	if err != nil {
+		return nil, err
+	}
+	return &Page{Title: title, Body: body}, nil
+}
+
+func renderTemplate(w http.ResponseWriter, tmpl string, p *Page) {
+	t, _ := template.ParseFiles(tmpl + ".html")
+	t.Execute(w, p)
+}
+
+func viewHandler(w http.ResponseWriter, r *http.Request) {
+	title := r.URL.Path[len("/view/"):]
+	p, _ := loadPage(title)
+	renderTemplate(w, "view", p)
+}
+
+func editHandler(w http.ResponseWriter, r *http.Request) {
+	title := r.URL.Path[len("/edit/"):]
+	p, err := loadPage(title)
+	if err != nil {
+		p = &Page{Title: title}
+	}
+	renderTemplate(w, "edit", p)
+}
+
 func main() {
-  fs := http.FileServer(http.Dir("Proyecto"))
-  http.Handle("/", fs)
-  http.HandleFunc("/login", login)
-
-
-  log.Println("Listening...")
-  http.ListenAndServe(":8450", nil)
+	http.HandleFunc("/view/", viewHandler)
+	http.HandleFunc("/edit/", editHandler)
+	//http.HandleFunc("/save/", saveHandler)
+	log.Fatal(http.ListenAndServe(":8080", nil))
 }
-
-func login(w http.ResponseWriter, r *http.Request) {
-    fmt.Println("method:", r.Method) //get request method
-    if r.Method == "GET" {
-        t, _ := template.ParseFiles("index.gtpl")
-        t.Execute(w, nil)
-    } else {
-        r.ParseForm()
-        // logic part of log in
-        fmt.Println("appName:", r.Form["appName"])
-
-        out, err := exec.Command("date").Output()
-        if err != nil {
-          log.Fatal(err)
-        }
-
-        fmt.Printf("", out)
-
-    }
-}
-
